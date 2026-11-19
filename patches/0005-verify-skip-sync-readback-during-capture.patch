@@ -1,0 +1,23 @@
+0005 verify.cpp: skip the synchronous top3 readback while a graph capture is active
+
+record_window's first-12-windows top3 diagnostic does a synchronous cudaMemcpy
+(logits D2H) at the end of the window body. record_window runs inside
+cudaStreamBeginCapture/EndCapture, and a sync memcpy during capture invalidates it
+(hipErrorStreamCaptureImplicit / cudaErrorStreamCaptureImplicit) -> every request
+fails with "verify: end capture: operation failed due to a previous error during
+capture" and the engine exits. Query the capture state and skip the readback while
+capturing; eager windows keep the diagnostic unchanged.
+
+--- a/edge0-strata/src/core/verify.cpp
++++ b/edge0-strata/src/core/verify.cpp
+@@ -2729,7 +2729,9 @@
+         }
+         // #879: whether each row's logits are all finite, beside the pick (read after the window's own sync)
+         if (nan_guard_on()) strata::kernels::logits_nonfinite_rows(head_logits_, T, (int) n_vocab_, m_nf_, cs);
+-        if (windows <= 12 && n_vocab_ > 0 && T > 0) {
++        cudaStreamCaptureStatus cap_st = cudaStreamCaptureStatusNone;
++        if (cudaStreamGetCaptureInfo(cs, &cap_st, nullptr) != cudaSuccess) cap_st = cudaStreamCaptureStatusNone;
++        if (windows <= 12 && n_vocab_ > 0 && T > 0 && cap_st == cudaStreamCaptureStatusNone) {
+             static std::vector<float> tmp;
+             tmp.resize((size_t) n_vocab_);
+             cudaMemcpy(tmp.data(), head_logits_, sizeof(float) * (size_t) n_vocab_, cudaMemcpyDeviceToHost);

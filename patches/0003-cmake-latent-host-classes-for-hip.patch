@@ -1,0 +1,18 @@
+0003 CMakeLists: add the latent host classes to strata_engine for HIP
+
+LatentDense/LatentA/LatentTables (latent_dense.cpp, latent_tables.cpp, latent_moe.cpp)
+are added to strata_engine only under if(STRATA_ENABLE_CUDA), yet verify.cpp,
+prefill.cpp, generate.cpp and peer_experts.cpp reference them in every build -> the
+strata link fails on HIP. The sources only use cuda* names the compat header maps.
+Drop when fixed upstream.
+
+--- a/edge0-strata/CMakeLists.txt
++++ b/edge0-strata/CMakeLists.txt
+@@ -2947,3 +2947,7 @@
+     target_compile_definitions(ds4_gg_bench PRIVATE STRATA_DSV41_TQ_CPU=1)
+   endif()
+ endif()
++
++if(STRATA_ENABLE_HIP)
++  target_sources(strata_engine PRIVATE src/core/latent_dense.cpp src/core/latent_tables.cpp src/latent/latent_moe.cpp)
++endif()

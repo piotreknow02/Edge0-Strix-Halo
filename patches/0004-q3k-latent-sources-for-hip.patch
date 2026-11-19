@@ -1,0 +1,45 @@
+0004 CMakeLists + moe_fused_q3k.cu: q3k latent launchers for HIP
+
+prefill.cpp references fused_q3k::experts_latent_q3k, lat_q3k_fused and
+fused_q3k::latent_dense_d in every build, but lat_q3k_fused.cu / moe_fused_q3k.cu are
+added to strata_mmq only in the CUDA branch -> HIP link fails. Add both files to the
+HIP source list (they carry HIP branches: exit stubs and gfx11 WMMA paths) with the
+compat include dir, and guard the unguarded latent_kernel_q3k launches (CUDA-only
+kernel; d.ok=false exits first on HIP). Drop when fixed upstream.
+
+--- a/edge0-strata/CMakeLists.txt
++++ b/edge0-strata/CMakeLists.txt
+@@ -2506,6 +2506,8 @@
+       src/prefill/moe_fused.cu
+       src/prefill/moe_fused_iq.cu
+       src/prefill/moe_f16_kq.cu
++      src/prefill/lat_q3k_fused.cu
++      src/prefill/moe_fused_q3k.cu
+       src/prefill/ggml_cuda_host.cu
+       "${_strata_quantize_cu}")
+     if(STRATA_MMQ_KQUANTS)
+@@ -2523,7 +2525,7 @@
+     endif()
+     set_source_files_properties(${_strata_mmq_sources} PROPERTIES LANGUAGE HIP)
+     # moe_fused.cu is Strata's own CUDA-shaped source: it takes the HIP compat headers, ggml's MMQ sources do not
+-    set_source_files_properties(src/prefill/moe_fused.cu src/prefill/moe_fused_iq.cu src/prefill/moe_f16_kq.cu
++    set_source_files_properties(src/prefill/moe_fused.cu src/prefill/moe_fused_iq.cu src/prefill/moe_f16_kq.cu src/prefill/lat_q3k_fused.cu src/prefill/moe_fused_q3k.cu
+                                 PROPERTIES INCLUDE_DIRECTORIES "${STRATA_HIP_COMPAT_INCLUDE_DIR}")
+     add_library(strata_mmq STATIC ${_strata_mmq_sources})
+     target_include_directories(strata_mmq
+--- a/edge0-strata/src/prefill/moe_fused_q3k.cu
++++ b/edge0-strata/src/prefill/moe_fused_q3k.cu
+@@ -1536,11 +1536,13 @@
+     const int64_t nfb_d = (int64_t) std::max<int64_t>(1, (int64_t) (g.ell >> 8));
+     const unsigned g_gu = (unsigned) std::min<int64_t>(tiles * nfb_gu, (int64_t) d.sms * d.occ_gu);
+     const unsigned g_d = (unsigned) std::min<int64_t>(tiles * nfb_d, (int64_t) d.sms * d.occ_d);
++#if !defined(__HIPCC__)
+     latent_kernel_q3k<true><<<g_gu, LTHREADS, lat_smem_bytes(), s>>>(b, tb, g, (const uint8_t*) xa, src,
+                                                                  (uint8_t*) hbuf, nullptr);
+     ck(cudaGetLastError(), "experts_latent_q3k gu");
+     latent_kernel_q3k<false><<<g_d, LTHREADS, lat_smem_bytes(), s>>>(b, tb, g, (const uint8_t*) hbuf, src, nullptr, dm);
+     ck(cudaGetLastError(), "experts_latent_q3k down");
++#endif
+     ck(cudaGetLastError(), "experts_latent_q3k");
+ }
+ 

@@ -1,0 +1,23 @@
+0002 moe_fused.cu: guard the latent_kernel launches for HIP builds
+
+latent_kernel is defined only under #if !defined(__HIPCC__) (CUDA sm80 PTX), but
+experts_latent launches it unguarded -> the TU does not compile under HIP. On HIP
+lat_dev() leaves d.ok=false so the launcher exits before reaching the launches; the
+guard changes no behavior, it only makes the file compile. Drop when fixed upstream.
+
+--- a/edge0-strata/src/prefill/moe_fused.cu
++++ b/edge0-strata/src/prefill/moe_fused.cu
+@@ -1409,11 +1409,13 @@
+     const int64_t tiles = (n + kTileRows - 1) / kTileRows + (b.e1 - b.e0);
+     const unsigned g_gu = (unsigned) std::min<int64_t>(tiles * 5, (int64_t) d.sms * d.occ_gu);
+     const unsigned g_d = (unsigned) std::min<int64_t>(tiles * 7, (int64_t) d.sms * d.occ_d);
++#if !defined(__HIPCC__)
+     latent_kernel<true><<<g_gu, LTHREADS, lat_smem_bytes(), s>>>(b, tb, g, (const uint8_t*) xa, src,
+                                                                  (uint8_t*) hbuf, nullptr);
+     ck(cudaGetLastError(), "experts_latent gu");
+     latent_kernel<false><<<g_d, LTHREADS, lat_smem_bytes(), s>>>(b, tb, g, (const uint8_t*) hbuf, src, nullptr, dm);
+     ck(cudaGetLastError(), "experts_latent down");
++#endif
+     ck(cudaGetLastError(), "experts_latent");
+ }
+ 

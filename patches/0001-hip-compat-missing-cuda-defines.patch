@@ -1,0 +1,22 @@
+0001 hip compat: map cuda* names the HIP build uses but the header never defined
+--- a/edge0-strata/include/strata/hip_compat/cuda_runtime.h
++++ b/edge0-strata/include/strata/hip_compat/cuda_runtime.h
+@@ -147,3 +147,18 @@
+ #define cudaMemcpyFromSymbol(dst, symbol, ...) hipMemcpyFromSymbol(dst, HIP_SYMBOL(symbol), __VA_ARGS__)
+ 
+ #include "intrinsics.hpp"
++
++// --- gfx1151 recipe patch: cuda* names missing from this header upstream
++#define cudaGraphNode_t hipGraphNode_t
++#define cudaGraphNodeGetType hipGraphNodeGetType
++#define cudaGraphNodeType hipGraphNodeType
++#define cudaGraphNodeTypeEmpty hipGraphNodeTypeEmpty
++#define cudaGraphNodeTypeKernel hipGraphNodeTypeKernel
++#define cudaGraphNodeTypeMemcpy hipGraphNodeTypeMemcpy
++#define cudaGraphKernelNodeGetParams hipGraphKernelNodeGetParams
++#define cudaGraphMemcpyNodeGetParams hipGraphMemcpyNodeGetParams
++#define cudaKernelNodeParams hipKernelNodeParams
++#define cudaMemcpy3DParms hipMemcpy3DParms
++#define cudaPointerAttributes hipPointerAttribute_t
++#define cudaPointerGetAttributes hipPointerGetAttributes
++#define cudaStreamGetCaptureInfo hipStreamGetCaptureInfo
